@@ -1,17 +1,67 @@
 package main
 
 import (
+	"log"
 	"fmt"
 	"net/http"
 	"os"
 	"bytes"
 	"flag"
 	"io/ioutil"
+	"encoding/json"
 	"github.com/HenryVolkmer/go-agent-smith/models"
+	ui "github.com/gizak/termui/v3"
+	"github.com/gizak/termui/v3/widgets"
 )
 
 func main() {
 
+	if err := ui.Init(); err != nil {
+		log.Fatalf("failed to initialize termui: %v", err)
+	}
+	defer ui.Close()
+
+	p := widgets.NewParagraph()
+	p.Text = "Hello World!"
+	p.SetRect(0, 0, 25, 5)
+
+	buffer := make([]string,1)
+	var result string
+
+	ui.Render(p)
+
+	uiEvents := ui.PollEvents()
+
+	for {
+		select {
+			case e := <-uiEvents:
+				switch e.ID {
+				case "q", "<C-c>":
+					return
+				case "<Space>":
+					buffer = append(buffer," ")
+					break
+				case "<Backspace>":
+					buffer = buffer[:len(buffer)-1]
+					break
+				case "<Enter>":
+					result = ""
+					result = for _,v := range buffer {
+						result += v
+					}
+				default:
+					buffer = append(buffer,e.ID)
+				}
+				p.Text = ""
+				for _,v := range buffer {
+					p.Text += v
+				}
+				ui.Render(p)
+
+		}
+	}
+
+	fmt.Println(result)
 
 	registerCmd := flag.NewFlagSet("register", flag.ExitOnError)
 	username := registerCmd.String("username","","the username to register")
@@ -34,8 +84,16 @@ func main() {
 				fmt.Println("username/password missing")
 				os.Exit(1)	
 			}
-			user := models.GetUserInstance(*username,*password,*homeserver)
-			requestSession(user,os.Args[1])
+
+			//var user models.UserInterface
+
+			if os.Args[1] == "register" {
+				user := models.GetUserForRegistration(*username,*password,*homeserver)
+				register(user)
+			} else {
+				user := models.GetUserForLogin(*username,*password,*homeserver)
+				login(user)
+			}
 		default:
 			fmt.Println("Unknown subcommand " + os.Args[1])
 			os.Exit(1)
@@ -44,34 +102,29 @@ func main() {
 	}
 }
 
+func register(user *models.UserReg) *models.UserSession {
+	endpoint := user.GetHomeserver() + "/_matrix/client/r0/register?kind=user"
+	return getSession(user,endpoint)
+}
 
-func requestSession(user *models.User,kind string) *models.UserSession {
-
+func login(user *models.UserLogin) *models.UserSession {
 	endpoint := user.GetHomeserver() + "/_matrix/client/r0/login"
+	return getSession(user,endpoint)
+}
 
-	if kind == "register" {
-		fmt.Println("register new user")
-		endpoint = user.GetHomeserver() + "/_matrix/client/r0/register?kind=user"
-	} else {
-		user.Type = "m.login.password"
-		user.Auth = nil
-		fmt.Println("login user")
-	}
+func getSession(user models.UserInterface,endpoint string) *models.UserSession {
 
-	resp, err := http.Post(endpoint,"application/x-www-form-urlencoded",bytes.NewBuffer(user.AsJson()))
-
-	fmt.Println(string(user.AsJson()))
-
+	payload,err := json.Marshal(user)
 	if err != nil {
 		panic(err)
 	}
-
+	resp, err := http.Post(endpoint,"application/x-www-form-urlencoded",bytes.NewBuffer(payload))
+	if err != nil {
+		panic(err)
+	}
 	defer resp.Body.Close()
 	body,_ := ioutil.ReadAll(resp.Body)
-
 	sess,err := models.NewUserSession(body)	
-
-	fmt.Println(resp)
 
 	return sess
 }

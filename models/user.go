@@ -4,6 +4,11 @@ import (
 	"encoding/json"
 )
 
+
+type UserInterface interface {
+	GetHomeserver() string
+}
+
 /**
  * used for Register of new Users
  */
@@ -21,22 +26,16 @@ type UserReg struct {
 type UserLogin struct {
 	Username string `json:"user"`
 	Password string `json:"password"`
+	homeserver string
 	Type string `json:"type"`
 }
 
-func (u *User) GetHomeserver() string {
+func (u *UserReg) GetHomeserver() string {
 	return u.homeserver
 }
 
-func (u *User) AsJson() []byte {
-
-	json,err := json.Marshal(*u)
-
-	if (err != nil) {
-		panic(err)
-	}
-
-	return json
+func (u *UserLogin) GetHomeserver() string {
+	return u.homeserver;
 }
 
 func GetUserForRegistration(username string,password string,homeserver string) *UserReg {
@@ -44,8 +43,12 @@ func GetUserForRegistration(username string,password string,homeserver string) *
 	return &user
 }
 
-func GetUserForLogin(username string,password string) *UserLogin {
-	user := UserLogin{Username: username,Password: password,Type: "m.login.password"}
+func GetUserForLogin(username string,password string,homeserver string) *UserLogin {
+	user := UserLogin{
+		Username: username,
+		Password: password,
+		Type: "m.login.password",
+		homeserver: homeserver}
 	return &user
 }
 
